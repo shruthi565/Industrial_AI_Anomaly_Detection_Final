@@ -10,7 +10,7 @@ import winsound
 
 from PIL import Image, ImageTk
 from datetime import datetime
- 
+
 
 # ============================================================
 # PROJECT ROOT
@@ -130,7 +130,6 @@ LATEST_DANGER_IMAGE = os.path.join(
 # ============================================================
 
 TEMPERATURE_THRESHOLD = 70.0
-
 VIBRATION_THRESHOLD = 7.0
 
 
@@ -151,7 +150,6 @@ class LiveMonitoring:
     ):
 
         self.parent = parent
-
         self.alerts_page = alerts_page
 
         # ----------------------------------------------------
@@ -159,11 +157,8 @@ class LiveMonitoring:
         # ----------------------------------------------------
 
         self.camera = None
-
         self.using_video = False
-
         self.running = False
-
         self.photo = None
 
         # ----------------------------------------------------
@@ -177,7 +172,6 @@ class LiveMonitoring:
         # ----------------------------------------------------
 
         self.detector = None
-
         self.anomaly_detector = None
 
         # ----------------------------------------------------
@@ -207,17 +201,11 @@ class LiveMonitoring:
         # ----------------------------------------------------
 
         self.previous_anomaly = False
-
         self.previous_danger = False
-
         self.previous_fall = False
-
         self.previous_hand_danger = False
-
         self.previous_body_danger = False
-
         self.previous_temperature_danger = False
-
         self.previous_vibration_danger = False
 
         # ----------------------------------------------------
@@ -225,7 +213,6 @@ class LiveMonitoring:
         # ----------------------------------------------------
 
         self.anomaly_image_saved = False
-
         self.danger_image_saved = False
 
         # ----------------------------------------------------
@@ -233,18 +220,28 @@ class LiveMonitoring:
         # ----------------------------------------------------
 
         self.sensor = SensorSimulator()
-        self.sensor.set_mode("high_temperature")
+
+        # Normal startup mode
+        self.sensor.set_mode("both")
 
         self.temperature = 0.0
         self.vibration = 0.0
-        # ====================================================
+
+        # ----------------------------------------------------
+        # PERFORMANCE SETTINGS
+        # ----------------------------------------------------
+
+        # Process one out of every 2 frames.
+        # This reduces YOLO/MediaPipe processing load.
+        self.frame_count = 0
+        self.process_every_n_frames = 2
+
+        # ----------------------------------------------------
         # CONTINUOUS ALERT SOUND
-        # ====================================================
+        # ----------------------------------------------------
 
         self.alert_sound_thread = None
-
         self.alert_sound_stop_event = threading.Event()
-
         self.alert_sound_lock = threading.Lock()
 
         # ----------------------------------------------------
@@ -270,7 +267,6 @@ class LiveMonitoring:
             expand=True
         )
 
-
         # ====================================================
         # CAMERA AREA
         # ====================================================
@@ -286,7 +282,6 @@ class LiveMonitoring:
             expand=True,
             padx=(0, 6)
         )
-
 
         # ====================================================
         # TITLE
@@ -304,7 +299,6 @@ class LiveMonitoring:
             pady=9
         )
 
-
         # ====================================================
         # VIDEO SELECTOR
         # ====================================================
@@ -320,7 +314,6 @@ class LiveMonitoring:
             pady=(0, 7)
         )
 
-
         tk.Label(
             selector_frame,
             text="SELECT VIDEO:",
@@ -332,11 +325,9 @@ class LiveMonitoring:
             padx=(5, 10)
         )
 
-
         self.video_var = tk.StringVar(
             value="Video 1 - Fall"
         )
-
 
         self.video_menu = tk.OptionMenu(
             selector_frame,
@@ -357,7 +348,6 @@ class LiveMonitoring:
             side="left"
         )
 
-
         # ====================================================
         # VIDEO DISPLAY
         # ====================================================
@@ -376,7 +366,6 @@ class LiveMonitoring:
             padx=8,
             pady=(0, 8)
         )
-
 
         # ====================================================
         # RIGHT STATUS PANEL
@@ -400,7 +389,6 @@ class LiveMonitoring:
             False
         )
 
-
         # ====================================================
         # STATUS TITLE
         # ====================================================
@@ -416,7 +404,6 @@ class LiveMonitoring:
             padx=16,
             pady=(13, 12)
         )
-
 
         # ====================================================
         # STATUS ROWS
@@ -470,7 +457,6 @@ class LiveMonitoring:
             "LOW"
         )
 
-
         # ====================================================
         # SEPARATOR
         # ====================================================
@@ -484,7 +470,6 @@ class LiveMonitoring:
             padx=16,
             pady=9
         )
-
 
         # ====================================================
         # CURRENT EVENT
@@ -500,7 +485,6 @@ class LiveMonitoring:
             anchor="w",
             padx=16
         )
-
 
         self.event_label = tk.Label(
             status_frame,
@@ -518,7 +502,6 @@ class LiveMonitoring:
             pady=5
         )
 
-
         # ====================================================
         # AI DETECTION
         # ====================================================
@@ -535,7 +518,6 @@ class LiveMonitoring:
             pady=(3, 0)
         )
 
-
         ai_text = (
             "YOLOv8 Person Detection\n"
             "Danger Zone Detection\n"
@@ -546,7 +528,6 @@ class LiveMonitoring:
             "Temperature Simulation\n"
             "Vibration Simulation"
         )
-
 
         tk.Label(
             status_frame,
@@ -560,7 +541,6 @@ class LiveMonitoring:
             padx=16,
             pady=5
         )
-
 
         # ====================================================
         # BUTTON AREA
@@ -577,7 +557,6 @@ class LiveMonitoring:
             padx=13,
             pady=10
         )
-
 
         # ====================================================
         # START BUTTON
@@ -602,7 +581,6 @@ class LiveMonitoring:
             fill="x",
             pady=(0, 5)
         )
-
 
         # ====================================================
         # STOP BUTTON
@@ -654,7 +632,6 @@ class LiveMonitoring:
             pady=3
         )
 
-
         tk.Label(
             row,
             text=label,
@@ -664,7 +641,6 @@ class LiveMonitoring:
         ).pack(
             side="left"
         )
-
 
         value_label = tk.Label(
             row,
@@ -702,12 +678,10 @@ class LiveMonitoring:
 
             return
 
-
         print(
             "Selected video:",
             self.selected_video
         )
-
 
         if self.running:
 
@@ -746,7 +720,6 @@ class LiveMonitoring:
 
         with self.alert_sound_lock:
 
-            # Already playing
             if (
                 self.alert_sound_thread is not None
                 and
@@ -755,10 +728,7 @@ class LiveMonitoring:
 
                 return
 
-
-            # Reset stop event
             self.alert_sound_stop_event.clear()
-
 
             def beep_loop():
 
@@ -770,7 +740,6 @@ class LiveMonitoring:
 
                     try:
 
-                        # First beep
                         winsound.Beep(
                             1000,
                             250
@@ -779,14 +748,10 @@ class LiveMonitoring:
                         if self.alert_sound_stop_event.is_set():
                             break
 
-
-                        # Small pause
                         self.alert_sound_stop_event.wait(
                             0.15
                         )
 
-
-                        # Second beep
                         if not self.alert_sound_stop_event.is_set():
 
                             winsound.Beep(
@@ -794,12 +759,9 @@ class LiveMonitoring:
                                 300
                             )
 
-
-                        # Pause before repeating
                         self.alert_sound_stop_event.wait(
                             0.35
                         )
-
 
                     except Exception as e:
 
@@ -810,11 +772,9 @@ class LiveMonitoring:
 
                         break
 
-
                 print(
                     "🔇 ALERT SOUND STOPPED"
                 )
-
 
             self.alert_sound_thread = threading.Thread(
                 target=beep_loop,
@@ -852,7 +812,6 @@ class LiveMonitoring:
 
             return
 
-
         try:
 
             self.alerts_page.add_alert(
@@ -860,7 +819,6 @@ class LiveMonitoring:
                 message,
                 source
             )
-
 
             print(
                 "--------------------------------"
@@ -885,7 +843,6 @@ class LiveMonitoring:
             print(
                 "--------------------------------"
             )
-
 
         except Exception as e:
 
@@ -915,35 +872,27 @@ class LiveMonitoring:
     def start_monitoring(self):
 
         if self.running:
-
             return
-
 
         # ====================================================
         # RESET STATES
         # ====================================================
 
         self.previous_anomaly = False
-
         self.previous_danger = False
-
         self.previous_fall = False
-
         self.previous_hand_danger = False
-
         self.previous_body_danger = False
-
         self.previous_temperature_danger = False
-
         self.previous_vibration_danger = False
 
         self.anomaly_image_saved = False
-
         self.danger_image_saved = False
 
+        # Reset frame counter
+        self.frame_count = 0
 
         self.stop_alert_sound()
-
 
         # ====================================================
         # CHECK VIDEO
@@ -964,7 +913,6 @@ class LiveMonitoring:
 
             return
 
-
         # ====================================================
         # DETERMINE VIDEO TYPE
         # ====================================================
@@ -972,7 +920,6 @@ class LiveMonitoring:
         danger_zone_enabled = (
             self.is_danger_zone_video()
         )
-
 
         print(
             "================================"
@@ -994,7 +941,6 @@ class LiveMonitoring:
             "================================"
         )
 
-
         # ====================================================
         # LOAD YOLO
         # ====================================================
@@ -1002,7 +948,12 @@ class LiveMonitoring:
         try:
 
             self.detector = YOLODetector(
-                enable_danger_zone=danger_zone_enabled
+                enable_danger_zone=danger_zone_enabled,
+                video_mode=(
+                    "video2"
+                    if danger_zone_enabled
+                    else "video1"
+                )
             )
 
         except Exception as e:
@@ -1016,7 +967,6 @@ class LiveMonitoring:
             )
 
             return
-
 
         # ====================================================
         # LOAD ANOMALY DETECTOR
@@ -1038,7 +988,6 @@ class LiveMonitoring:
 
                 self.anomaly_detector = None
 
-
         # ====================================================
         # OPEN VIDEO
         # ====================================================
@@ -1048,7 +997,6 @@ class LiveMonitoring:
         )
 
         self.using_video = True
-
 
         if not self.camera.isOpened():
 
@@ -1062,23 +1010,18 @@ class LiveMonitoring:
             )
 
             self.camera.release()
-
             self.camera = None
 
             if self.detector:
 
                 try:
-
                     self.detector.release()
-
                 except Exception:
-
                     pass
 
             self.detector = None
 
             return
-
 
         # ====================================================
         # RESET VIDEO
@@ -1089,19 +1032,16 @@ class LiveMonitoring:
             0
         )
 
-
         # ====================================================
         # START
         # ====================================================
 
         self.running = True
 
-
         self.system_status.config(
             text="ONLINE",
             fg="#16A34A"
         )
-
 
         self.start_button.config(
             state="disabled"
@@ -1110,7 +1050,6 @@ class LiveMonitoring:
         self.stop_button.config(
             state="normal"
         )
-
 
         if danger_zone_enabled:
 
@@ -1126,11 +1065,9 @@ class LiveMonitoring:
                 "Fall monitoring enabled."
             )
 
-
         self.event_label.config(
             text=event_text
         )
-
 
         self.update_camera()
 
@@ -1142,21 +1079,16 @@ class LiveMonitoring:
     def update_camera(self):
 
         if not self.running:
-
             return
-
 
         if self.camera is None:
-
             return
-
 
         # ====================================================
         # READ FRAME
         # ====================================================
 
         success, frame = self.camera.read()
-
 
         # ====================================================
         # VIDEO ENDED
@@ -1175,13 +1107,33 @@ class LiveMonitoring:
 
             success, frame = self.camera.read()
 
-
             if not success:
 
                 self.stop_monitoring()
 
                 return
 
+        # ====================================================
+        # FRAME SKIPPING FOR PERFORMANCE
+        # ====================================================
+
+        self.frame_count += 1
+
+        if (
+            self.frame_count
+            %
+            self.process_every_n_frames
+            != 0
+        ):
+
+            if self.running:
+
+                self.parent.after(
+                    10,
+                    self.update_camera
+                )
+
+            return
 
         # ====================================================
         # YOLO
@@ -1208,7 +1160,6 @@ class LiveMonitoring:
 
             return
 
-
         # ====================================================
         # RESULTS
         # ====================================================
@@ -1220,14 +1171,12 @@ class LiveMonitoring:
             )
         )
 
-
         danger = bool(
             result.get(
                 "danger",
                 False
             )
         )
-
 
         fall = bool(
             result.get(
@@ -1236,14 +1185,12 @@ class LiveMonitoring:
             )
         )
 
-
         hand_danger = bool(
             result.get(
                 "hand_danger",
                 False
             )
         )
-
 
         body_danger = bool(
             result.get(
@@ -1252,27 +1199,22 @@ class LiveMonitoring:
             )
         )
 
-
         status = result.get(
             "status",
             "NO WORKER"
         )
-
 
         pose_landmarks = result.get(
             "pose_landmarks",
             None
         )
 
-
         # ====================================================
         # ANOMALY DETECTION
         # ====================================================
 
         anomaly = False
-
         anomaly_state = "NO POSE"
-
 
         if (
             self.anomaly_detector is not None
@@ -1288,13 +1230,11 @@ class LiveMonitoring:
                     )
                 )
 
-
                 anomaly_result = (
                     self.anomaly_detector.detect(
                         features
                     )
                 )
-
 
                 anomaly = bool(
                     anomaly_result.get(
@@ -1303,14 +1243,12 @@ class LiveMonitoring:
                     )
                 )
 
-
                 anomaly_state = (
                     anomaly_result.get(
                         "status",
                         "NO POSE"
                     )
                 )
-
 
             except Exception as e:
 
@@ -1320,9 +1258,7 @@ class LiveMonitoring:
                 )
 
                 anomaly = False
-
                 anomaly_state = "ERROR"
-
 
         # ====================================================
         # SIMULATED SENSORS
@@ -1332,16 +1268,13 @@ class LiveMonitoring:
             self.get_simulated_sensor_values()
         )
 
-
         temperature_danger = (
             self.temperature >= TEMPERATURE_THRESHOLD
         )
 
-
         vibration_danger = (
             self.vibration >= VIBRATION_THRESHOLD
         )
-
 
         # ====================================================
         # WORKER STATUS
@@ -1360,7 +1293,6 @@ class LiveMonitoring:
                 text="NOT DETECTED",
                 fg="#64748B"
             )
-
 
         # ====================================================
         # DANGER STATUS
@@ -1394,7 +1326,6 @@ class LiveMonitoring:
                 fg="#16A34A"
             )
 
-
         # ====================================================
         # FALL STATUS
         # ====================================================
@@ -1412,7 +1343,6 @@ class LiveMonitoring:
                 text="NOT DETECTED",
                 fg="#64748B"
             )
-
 
         # ====================================================
         # ANOMALY STATUS
@@ -1453,7 +1383,6 @@ class LiveMonitoring:
                 fg="#64748B"
             )
 
-
         # ====================================================
         # TEMPERATURE
         # ====================================================
@@ -1472,7 +1401,6 @@ class LiveMonitoring:
                 fg="#16A34A"
             )
 
-
         # ====================================================
         # VIBRATION
         # ====================================================
@@ -1490,7 +1418,6 @@ class LiveMonitoring:
                 text=f"{self.vibration:.1f}",
                 fg="#16A34A"
             )
-
 
         # ====================================================
         # OVERALL HAZARD
@@ -1512,7 +1439,6 @@ class LiveMonitoring:
             vibration_danger
         )
 
-
         # ====================================================
         # CONTINUOUS BEEP
         # ====================================================
@@ -1525,7 +1451,6 @@ class LiveMonitoring:
 
             self.stop_alert_sound()
 
-
         # ====================================================
         # RISK LEVEL
         # ====================================================
@@ -1533,21 +1458,17 @@ class LiveMonitoring:
         if hazard_detected:
 
             risk_level = "HIGH"
-
             risk_color = "#DC2626"
 
         else:
 
             risk_level = "LOW"
-
             risk_color = "#16A34A"
-
 
         self.risk_status.config(
             text=risk_level,
             fg=risk_color
         )
-
 
         # ====================================================
         # CURRENT EVENT
@@ -1607,11 +1528,9 @@ class LiveMonitoring:
                 "No worker detected"
             )
 
-
         self.event_label.config(
             text=alert_message
         )
-
 
         # ====================================================
         # FALL ALERT
@@ -1629,7 +1548,6 @@ class LiveMonitoring:
                 "MediaPipe Fall Detection"
             )
 
-
         # ====================================================
         # DANGER ALERT
         # ====================================================
@@ -1645,7 +1563,6 @@ class LiveMonitoring:
                 "Worker entered danger zone",
                 "YOLOv8 + Danger Zone Detection"
             )
-
 
         # ====================================================
         # HAND DANGER ALERT
@@ -1663,7 +1580,6 @@ class LiveMonitoring:
                 "MediaPipe Hands + Danger Zone"
             )
 
-
         # ====================================================
         # BODY DANGER ALERT
         # ====================================================
@@ -1679,7 +1595,6 @@ class LiveMonitoring:
                 "Worker entered danger zone",
                 "YOLOv8 + Danger Zone Detection"
             )
-
 
         # ====================================================
         # TEMPERATURE ALERT
@@ -1700,7 +1615,6 @@ class LiveMonitoring:
                 "Simulated Temperature Sensor"
             )
 
-
         # ====================================================
         # VIBRATION ALERT
         # ====================================================
@@ -1720,7 +1634,6 @@ class LiveMonitoring:
                 "Simulated Vibration Sensor"
             )
 
-
         # ====================================================
         # ANOMALY ALERT
         # ====================================================
@@ -1736,7 +1649,6 @@ class LiveMonitoring:
                 "Industrial anomaly detected",
                 "Isolation Forest"
             )
-
 
         # ====================================================
         # SAVE DANGER IMAGE
@@ -1763,7 +1675,6 @@ class LiveMonitoring:
                     f"Danger image error: {e}"
                 )
 
-
         # ====================================================
         # SAVE ANOMALY IMAGE
         # ====================================================
@@ -1789,25 +1700,17 @@ class LiveMonitoring:
                     f"Anomaly image error: {e}"
                 )
 
-
         # ====================================================
         # PREVIOUS STATES
         # ====================================================
 
         self.previous_anomaly = anomaly
-
         self.previous_danger = danger
-
         self.previous_fall = fall
-
         self.previous_hand_danger = hand_danger
-
         self.previous_body_danger = body_danger
-
         self.previous_temperature_danger = temperature_danger
-
         self.previous_vibration_danger = vibration_danger
-
 
         # ====================================================
         # ANOMALY VIDEO TEXT
@@ -1849,7 +1752,6 @@ class LiveMonitoring:
                 2
             )
 
-
         # ====================================================
         # SENSOR DISPLAY
         # ====================================================
@@ -1861,14 +1763,12 @@ class LiveMonitoring:
             (0, 180, 0)
         )
 
-
         vibration_color = (
             (0, 0, 255)
             if vibration_danger
             else
             (0, 180, 0)
         )
-
 
         cv2.putText(
             processed_frame,
@@ -1880,7 +1780,6 @@ class LiveMonitoring:
             2
         )
 
-
         cv2.putText(
             processed_frame,
             f"VIBRATION: {self.vibration:.1f}",
@@ -1890,7 +1789,6 @@ class LiveMonitoring:
             vibration_color,
             2
         )
-
 
         # ====================================================
         # RISK DISPLAY
@@ -1903,7 +1801,6 @@ class LiveMonitoring:
             (0, 180, 0)
         )
 
-
         cv2.putText(
             processed_frame,
             f"RISK LEVEL: {risk_level}",
@@ -1913,7 +1810,6 @@ class LiveMonitoring:
             risk_display_color,
             2
         )
-
 
         # ====================================================
         # ALERT DISPLAY
@@ -1931,7 +1827,6 @@ class LiveMonitoring:
                 3
             )
 
-
         # ====================================================
         # SAVE LATEST IMAGE
         # ====================================================
@@ -1948,7 +1843,6 @@ class LiveMonitoring:
             print(
                 f"Latest image error: {e}"
             )
-
 
         # ====================================================
         # LATEST JSON
@@ -2038,7 +1932,6 @@ class LiveMonitoring:
                 )
         }
 
-
         # ====================================================
         # INCIDENT MANAGER
         # ====================================================
@@ -2056,7 +1949,6 @@ class LiveMonitoring:
                 print(
                     f"Incident manager error: {e}"
                 )
-
 
         # ====================================================
         # SAVE JSON
@@ -2082,7 +1974,6 @@ class LiveMonitoring:
                 f"Status file error: {e}"
             )
 
-
         # ====================================================
         # DISPLAY FRAME
         # ====================================================
@@ -2092,19 +1983,12 @@ class LiveMonitoring:
             cv2.COLOR_BGR2RGB
         )
 
-
         image = Image.fromarray(
             rgb_frame
         )
 
-
-        # Smaller display so the status panel/buttons
-        # remain visible.
-
         DISPLAY_WIDTH = 640
-
         DISPLAY_HEIGHT = 390
-
 
         image.thumbnail(
             (
@@ -2114,22 +1998,18 @@ class LiveMonitoring:
             Image.Resampling.LANCZOS
         )
 
-
         self.photo = ImageTk.PhotoImage(
             image
         )
-
 
         self.camera_label.config(
             image=self.photo,
             text=""
         )
 
-
         self.camera_label.image = (
             self.photo
         )
-
 
         # ====================================================
         # NEXT FRAME
@@ -2138,7 +2018,7 @@ class LiveMonitoring:
         if self.running:
 
             self.parent.after(
-                30,
+                10,
                 self.update_camera
             )
 
@@ -2153,16 +2033,13 @@ class LiveMonitoring:
             "Stopping monitoring..."
         )
 
-
         self.running = False
-
 
         # ====================================================
         # STOP CONTINUOUS BEEP
         # ====================================================
 
         self.stop_alert_sound()
-
 
         # ====================================================
         # CAMERA
@@ -2175,11 +2052,9 @@ class LiveMonitoring:
                 self.camera.release()
 
             except Exception:
-
                 pass
 
             self.camera = None
-
 
         # ====================================================
         # YOLO
@@ -2192,11 +2067,9 @@ class LiveMonitoring:
                 self.detector.release()
 
             except Exception:
-
                 pass
 
             self.detector = None
-
 
         # ====================================================
         # ANOMALY
@@ -2221,34 +2094,30 @@ class LiveMonitoring:
 
             self.anomaly_detector = None
 
-
         # ====================================================
         # RESET STATES
         # ====================================================
 
         self.previous_anomaly = False
-
         self.previous_danger = False
-
         self.previous_fall = False
-
         self.previous_hand_danger = False
-
         self.previous_body_danger = False
-
         self.previous_temperature_danger = False
-
         self.previous_vibration_danger = False
 
+        # ====================================================
+        # RESET FRAME COUNTER
+        # ====================================================
+
+        self.frame_count = 0
 
         # ====================================================
         # SENSOR VALUES
         # ====================================================
 
         self.temperature = 0.0
-
         self.vibration = 0.0
-
 
         # ====================================================
         # IMAGE
@@ -2256,14 +2125,12 @@ class LiveMonitoring:
 
         self.photo = None
 
-
         self.camera_label.config(
             image="",
             text="Camera is not running"
         )
 
         self.camera_label.image = None
-
 
         # ====================================================
         # STATUS
@@ -2274,53 +2141,44 @@ class LiveMonitoring:
             fg="#64748B"
         )
 
-
         self.worker_status.config(
             text="NOT DETECTED",
             fg="#64748B"
         )
-
 
         self.danger_status.config(
             text="SAFE",
             fg="#16A34A"
         )
 
-
         self.fall_status.config(
             text="NOT DETECTED",
             fg="#64748B"
         )
-
 
         self.anomaly_status.config(
             text="NOT DETECTED",
             fg="#64748B"
         )
 
-
         self.temperature_status.config(
             text="-- °C",
             fg="#64748B"
         )
-
 
         self.vibration_status.config(
             text="--",
             fg="#64748B"
         )
 
-
         self.risk_status.config(
             text="LOW",
             fg="#16A34A"
         )
 
-
         self.event_label.config(
             text="System waiting..."
         )
-
 
         # ====================================================
         # BUTTONS
@@ -2333,7 +2191,6 @@ class LiveMonitoring:
         self.stop_button.config(
             state="disabled"
         )
-
 
         print(
             "Monitoring stopped."
