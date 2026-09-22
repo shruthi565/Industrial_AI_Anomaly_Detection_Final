@@ -1,0 +1,14 @@
+venv/
+__pycache__/
+*.pyc
+*.db
+logs/
+reports/
+__pycache__/
+*.pyc
+
+data/videos/
+data/*.jpg
+
+yolov8n.pt
+models/yolov8n.pt
