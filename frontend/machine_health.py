@@ -1,4 +1,6 @@
 import tkinter as tk
+import json
+import os
 
 
 class MachineHealth:
@@ -6,8 +8,18 @@ class MachineHealth:
     def __init__(self, parent):
 
         self.parent = parent
+        self.refresh_id = None
 
         self.create_ui()
+
+        # Start reading live sensor data
+        self.update_status()
+
+        # Refresh every 1 second
+        self.refresh_id = self.parent.after(
+            1000,
+            self.refresh_status
+        )
 
     # ==================================================
     # CREATE UI
@@ -39,28 +51,32 @@ class MachineHealth:
             pady=(0, 15)
         )
 
-        self.create_card(
+        # Machine status
+        self.machine_status_label = self.create_card(
             summary,
             "MACHINE STATUS",
             "HEALTHY",
             "#16A34A"
         )
 
-        self.create_card(
+        # Temperature status
+        self.temperature_summary_label = self.create_card(
             summary,
             "TEMPERATURE",
             "NORMAL",
             "#16A34A"
         )
 
-        self.create_card(
+        # Vibration status
+        self.vibration_summary_label = self.create_card(
             summary,
             "VIBRATION",
             "NORMAL",
             "#16A34A"
         )
 
-        self.create_card(
+        # Anomaly status
+        self.anomaly_summary_label = self.create_card(
             summary,
             "ANOMALY",
             "NOT DETECTED",
@@ -145,28 +161,28 @@ class MachineHealth:
 
         # Machine information
 
-        self.info_row(
+        self.machine_running_label = self.info_row(
             overview,
             "Machine Status",
             "RUNNING",
             "#16A34A"
         )
 
-        self.info_row(
+        self.health_condition_label = self.info_row(
             overview,
             "Health Condition",
             "HEALTHY",
             "#16A34A"
         )
 
-        self.info_row(
+        self.anomaly_status_label = self.info_row(
             overview,
             "Anomaly Status",
             "NORMAL",
             "#16A34A"
         )
 
-        self.info_row(
+        self.monitoring_label = self.info_row(
             overview,
             "Monitoring",
             "ACTIVE",
@@ -204,27 +220,39 @@ class MachineHealth:
             pady=(25, 20)
         )
 
-        # Temperature
+        # ==================================================
+        # TEMPERATURE
+        # ==================================================
 
-        self.sensor_box(
+        (
+            self.temperature_value_label,
+            self.temperature_status_label
+        ) = self.sensor_box(
             analysis,
             "TEMPERATURE",
-            "32.6 °C",
-            "NORMAL",
-            "#16A34A"
+            "-- °C",
+            "WAITING",
+            "#64748B"
         )
 
-        # Vibration
+        # ==================================================
+        # VIBRATION
+        # ==================================================
 
-        self.sensor_box(
+        (
+            self.vibration_value_label,
+            self.vibration_status_label
+        ) = self.sensor_box(
             analysis,
             "VIBRATION",
-            "2.3 mm/s",
-            "NORMAL",
-            "#16A34A"
+            "-- mm/s",
+            "WAITING",
+            "#64748B"
         )
 
-        # Isolation Forest
+        # ==================================================
+        # ISOLATION FOREST
+        # ==================================================
 
         self.sensor_box(
             analysis,
@@ -339,16 +367,20 @@ class MachineHealth:
             pady=(15, 5)
         )
 
-        tk.Label(
+        value_label = tk.Label(
             card,
             text=value,
             font=("Arial", 16, "bold"),
             bg="white",
             fg=color
-        ).pack(
+        )
+
+        value_label.pack(
             anchor="w",
             padx=15
         )
+
+        return value_label
 
     # ==================================================
     # INFORMATION ROW
@@ -383,15 +415,19 @@ class MachineHealth:
             side="left"
         )
 
-        tk.Label(
+        value_label = tk.Label(
             row,
             text=value,
             font=("Arial", 9, "bold"),
             bg="white",
             fg=color
-        ).pack(
+        )
+
+        value_label.pack(
             side="right"
         )
+
+        return value_label
 
     # ==================================================
     # SENSOR BOX
@@ -431,44 +467,361 @@ class MachineHealth:
             pady=(12, 3)
         )
 
-        tk.Label(
+        value_label = tk.Label(
             box,
             text=value,
             font=("Arial", 16, "bold"),
             bg="#F8FAFC",
             fg="#172033"
-        ).pack(
+        )
+
+        value_label.pack(
             anchor="w",
             padx=15
         )
 
-        tk.Label(
+        status_label = tk.Label(
             box,
             text=status,
             font=("Arial", 9, "bold"),
             bg="#F8FAFC",
             fg=color
-        ).pack(
+        )
+
+        status_label.pack(
             anchor="w",
             padx=15,
             pady=(2, 12)
         )
 
+        return value_label, status_label
+
     # ==================================================
-    # UPDATE MACHINE HEALTH
+    # READ LIVE STATUS
     # ==================================================
 
-    def update_status(
-        self,
-        temperature=32.6,
-        vibration=2.3,
-        anomaly=False
-    ):
+    def update_status(self):
 
-        # This method will later receive the
-        # real Isolation Forest prediction.
+        project_root = os.path.dirname(
+            os.path.dirname(
+                os.path.abspath(__file__)
+            )
+        )
 
-        pass
+        status_file = os.path.join(
+            project_root,
+            "data",
+            "latest_status.json"
+        )
+
+        try:
+
+            if not os.path.exists(status_file):
+                return
+
+            with open(
+                status_file,
+                "r",
+                encoding="utf-8"
+            ) as f:
+
+                data = json.load(f)
+
+            # ==================================================
+            # SENSOR VALUES
+            # ==================================================
+
+            temperature = float(
+                data.get(
+                    "temperature",
+                    0
+                )
+            )
+
+            vibration = float(
+                data.get(
+                    "vibration",
+                    0
+                )
+            )
+
+            temperature_threshold = float(
+                data.get(
+                    "temperature_threshold",
+                    70.0
+                )
+            )
+
+            vibration_threshold = float(
+                data.get(
+                    "vibration_threshold",
+                    7.0
+                )
+            )
+
+            # ==================================================
+            # ANOMALY FLAGS
+            # ==================================================
+
+            temperature_danger = bool(
+                data.get(
+                    "temperature_danger",
+                    temperature >= temperature_threshold
+                )
+            )
+
+            vibration_danger = bool(
+                data.get(
+                    "vibration_danger",
+                    vibration >= vibration_threshold
+                )
+            )
+
+            anomaly = bool(
+                data.get(
+                    "anomaly",
+                    False
+                )
+            )
+
+            danger = bool(
+                data.get(
+                    "danger",
+                    False
+                )
+            )
+
+            fall = bool(
+                data.get(
+                    "fall",
+                    False
+                )
+            )
+
+            hand_danger = bool(
+                data.get(
+                    "hand_danger",
+                    False
+                )
+            )
+
+            body_danger = bool(
+                data.get(
+                    "body_danger",
+                    False
+                )
+            )
+
+            # ==================================================
+            # OVERALL MACHINE ANOMALY
+            # ==================================================
+
+            machine_anomaly = (
+                temperature_danger
+                or vibration_danger
+                or anomaly
+                or danger
+                or fall
+                or hand_danger
+                or body_danger
+            )
+
+            # ==================================================
+            # TEMPERATURE VALUE
+            # ==================================================
+
+            self.temperature_value_label.config(
+                text=f"{temperature:.2f} °C",
+                fg=(
+                    "#DC2626"
+                    if temperature_danger
+                    else "#16A34A"
+                )
+            )
+
+            # Temperature status
+            self.temperature_status_label.config(
+                text=(
+                    "HIGH"
+                    if temperature_danger
+                    else "NORMAL"
+                ),
+                fg=(
+                    "#DC2626"
+                    if temperature_danger
+                    else "#16A34A"
+                )
+            )
+
+            # ==================================================
+            # VIBRATION VALUE
+            # ==================================================
+
+            self.vibration_value_label.config(
+                text=f"{vibration:.2f} mm/s",
+                fg=(
+                    "#DC2626"
+                    if vibration_danger
+                    else "#16A34A"
+                )
+            )
+
+            # Vibration status
+            self.vibration_status_label.config(
+                text=(
+                    "HIGH"
+                    if vibration_danger
+                    else "NORMAL"
+                ),
+                fg=(
+                    "#DC2626"
+                    if vibration_danger
+                    else "#16A34A"
+                )
+            )
+
+            # ==================================================
+            # TOP SUMMARY
+            # ==================================================
+
+            if machine_anomaly:
+
+                self.machine_status_label.config(
+                    text="ANOMALY",
+                    fg="#DC2626"
+                )
+
+            else:
+
+                self.machine_status_label.config(
+                    text="HEALTHY",
+                    fg="#16A34A"
+                )
+
+            # Temperature summary
+
+            if temperature_danger:
+
+                self.temperature_summary_label.config(
+                    text="HIGH",
+                    fg="#DC2626"
+                )
+
+            else:
+
+                self.temperature_summary_label.config(
+                    text="NORMAL",
+                    fg="#16A34A"
+                )
+
+            # Vibration summary
+
+            if vibration_danger:
+
+                self.vibration_summary_label.config(
+                    text="HIGH",
+                    fg="#DC2626"
+                )
+
+            else:
+
+                self.vibration_summary_label.config(
+                    text="NORMAL",
+                    fg="#16A34A"
+                )
+
+            # Anomaly summary
+
+            if machine_anomaly:
+
+                self.anomaly_summary_label.config(
+                    text="DETECTED",
+                    fg="#DC2626"
+                )
+
+            else:
+
+                self.anomaly_summary_label.config(
+                    text="NOT DETECTED",
+                    fg="#64748B"
+                )
+
+            # ==================================================
+            # MACHINE OVERVIEW
+            # ==================================================
+
+            self.machine_running_label.config(
+                text=(
+                    "RUNNING"
+                    if data.get("system") == "ONLINE"
+                    else "OFFLINE"
+                ),
+                fg=(
+                    "#16A34A"
+                    if data.get("system") == "ONLINE"
+                    else "#64748B"
+                )
+            )
+
+            # Health condition
+
+            if machine_anomaly:
+
+                self.health_condition_label.config(
+                    text="ANOMALY",
+                    fg="#DC2626"
+                )
+
+            else:
+
+                self.health_condition_label.config(
+                    text="HEALTHY",
+                    fg="#16A34A"
+                )
+
+            # Anomaly status
+
+            if machine_anomaly:
+
+                self.anomaly_status_label.config(
+                    text="DETECTED",
+                    fg="#DC2626"
+                )
+
+            else:
+
+                self.anomaly_status_label.config(
+                    text="NORMAL",
+                    fg="#16A34A"
+                )
+
+        except Exception as e:
+
+            print(
+                "Machine Health update error:",
+                e
+            )
+
+    # ==================================================
+    # REFRESH
+    # ==================================================
+
+    def refresh_status(self):
+
+        try:
+
+            if self.page.winfo_exists():
+
+                self.update_status()
+
+                self.refresh_id = self.parent.after(
+                    1000,
+                    self.refresh_status
+                )
+
+        except Exception:
+
+            pass
 
     # ==================================================
     # CLEANUP
@@ -476,4 +829,26 @@ class MachineHealth:
 
     def destroy(self):
 
-        self.page.destroy()
+        try:
+
+            if self.refresh_id is not None:
+
+                self.parent.after_cancel(
+                    self.refresh_id
+                )
+
+                self.refresh_id = None
+
+        except Exception:
+
+            pass
+
+        try:
+
+            if self.page.winfo_exists():
+
+                self.page.destroy()
+
+        except Exception:
+
+            pass
